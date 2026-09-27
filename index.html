@@ -1,95 +1,179 @@
 <!DOCTYPE html>
-<html lang="ko"> 
-    <head>
-        <meta charset="utf-8">
-        <title> Sierpinski Carpet</title>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sierpinski Carpet - WebGL</title>
 
-        <script id="vertex-shader" type="x-shader/x-vertex">
-        attribute vec4  vPosition;   // 정점 위치 (클립 좌표)
-        attribute vec2  vLocal;      // 사각형 내부 좌표 (0 ~ 1)
-        attribute float vLevel;      // 정점으로 분할한 단계
-        attribute float vDepth;      // 이 사각형의 목표 분할 횟수
+<!-- ===================== Vertex Shader ===================== -->
+<script id="vertex-shader" type="x-shader/x-vertex">
+attribute vec4  vPosition;   // 정점 위치 (클립 좌표)
+attribute vec2  vLocal;      // 사각형 내부 좌표 (0 ~ 1)
+attribute float vLevel;      // 정점으로 분할한 단계
+attribute float vDepth;      // 이 사각형의 목표 분할 횟수
 
-        varying vec2  fLocal;
-        varying float fLevel;
-        varying float fDepth;
-        varying vec2  fPosition;
+varying vec2  fLocal;
+varying float fLevel;
+varying float fDepth;
+varying vec2  fPosition;
 
-        void mian() {
-            gl_Position = vPosition;
-            fLocal    = vLocal;
-            fLevel    = vLevel;
-            fDepth    = vDepth;
-            fPosition = vPosition.xy;
-        }</script>
+void main()
+{
+    gl_Position = vPosition;
+    fLocal    = vLocal;
+    fLevel    = vLevel;
+    fDepth    = vDepth;
+    fPosition = vPosition.xy;
+}
+</script>
 
-        <script id="fragment-shader" type="x-shader/x-fragment">
-        #ifdef GL_FRAGMENT_PRECISION_HIGH
-            precision highp float;
-        #else
-            precision mediump float;
-        #endif
+<!-- ===================== Fragment Shader ===================== -->
+<script id="fragment-shader" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
 
-        varying vec2  fLocal;
-        varying float fLevel;
-        varying float fDepth;
-        varying vec2  fPosition;
+varying vec2  fLocal;
+varying float fLevel;
+varying float fDepth;
+varying vec2  fPosition;
 
-        void main() { //정점으로 나누지 않은 나머지 단계는 단편 단위로 가운데를 제거
-            float extra = floor(fDepth - fLevel + 0.5);
-            vec2 p = fLocal;
-            for (int i = 0; i < 8; i++) {
-                if (float(i) >= extra) break;
-                p *= 3.0;
-                vec2 cell = floor(p);
-                if (cell.x == 1.0 && cell.y == 1.0) discard;
-                p -= cell;
-            }
-            vec3 color = vec3(0.2, 0.3, 0.6);
-            gl_FragColor = vec4(color, 1.0);
-        }</script>
+uniform vec3  palette[9];    // 분할 횟수 0 ~ 8 에 대응하는 색상
+uniform float depthShift;    // 횟수가 바뀔 때 이전 색에서 새 색으로 넘어가는 보간 값
+uniform int   filterMode;    // 0: RGB, 1: CMY 보색, 2: NTSC 명암도
+uniform vec4  hoverBox;      // 마우스가 올라간 사각형 (x0, y0, x1, y1)
 
-    <script type="text/javascript" src = "Common/webgl-utils.js"></script>
-    <script type="text/javascript" src = "Common/initShaders.js"></script>
-    <script type="text/javascript" src = "Common/MV.js"></script>
-    <script type="text/javascript" src = "carpet.js"></script>
+vec3 paletteColor(float t)
+{
+    float i0 = floor(t);
+    vec3 c0 = palette[0];
+    vec3 c1 = palette[0];
+    for (int i = 0; i < 9; i++) {
+        if (float(i) == i0)       c0 = palette[i];
+        if (float(i) == i0 + 1.0) c1 = palette[i];
+    }
+    if (i0 >= 8.0) c1 = c0;
+    return mix(c0, c1, fract(t));
+}
 
-    <style>
-        body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
-                margin: 24px; color: #222; }
-        h1 { font-size: 1.4rem; margin: 0 0 4px; }
-        .sub { color: #666; font-size: 0.9rem; margin: 0 0 16px; }
-        .wrap { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
-        canvas { border: 1px solid #999; width: 560px; height: 560px; max-width: 100%; }
-        .panel { width: 310px; }
-        fieldset { border: 1px solid #ccc; margin: 0 0 16px; padding: 10px 14px 12px; }
-        legend { font-weight: bold; padding: 0 6px; }
-        .row { margin: 8px 0; }
-        .row > label { display: block; margin-bottom: 4px; }
-        input[type=range] { width: 190px; vertical-align: middle; }
-        #info { font-size: 0.9rem; color: #444; line-height: 1.6; }
-    </style>
-    </head>
+void main()
+{
+    // 1. 정점나머지 단계 가운데 제거
+    float extra = floor(fDepth - fLevel + 0.5);
+    vec2 p = fLocal;
+    for (int i = 0; i < 8; i++) {
+        if (float(i) >= extra) break;
+        p *= 3.0;
+        vec2 cell = floor(p);
+        if (cell.x == 1.0 && cell.y == 1.0) discard;
+        p -= cell;
+    }
 
-    <body>
-    <h1>Sierpinski Carpet</h1>
-    <p class="sub">키보드 + / − : 전체 분할 횟수</p>
+    // 2. 분할 횟수에 따른 색상 
+    vec3 color = paletteColor(clamp(fDepth + depthShift, 0.0, 8.0));
 
-    <div class="wrap">
-        <canvas id="gl-canvas" width="512" height="512">
-            Oops ... your browser doesn't support the HTML5 canvas element
-        </canvas>
+    // 3. 색상 모델 필터
+    if (filterMode == 1) {
+        color = vec3(1.0) - color;                           // CMY = (1,1,1) - RGB
+    }
+    else if (filterMode == 2) {
+        float y = dot(color, vec3(0.299, 0.587, 0.114));     // NTSC 명암도
+        color = vec3(y);
+    }
 
-        <div class="panel">
-            <fieldset>
-            <legend>분할 횟수 제어</legend>
-            <div class="row">
-                <label for="DepthSlider">전체 분할 횟수: <b id="DepthValue">3</b></label>
-                0 <input id="DepthSlider" type="range" min="0" max="5" step="1" value="3"> 5
-            </div>
-            </fieldset>
-            <div id="info"></div>
-        </div>
-    </div>
+    // 4. 마우스가 올라간 사각형
+    if (fPosition.x >= hoverBox.x && fPosition.x <= hoverBox.z &&
+        fPosition.y >= hoverBox.y && fPosition.y <= hoverBox.w) {
+        color = mix(color, vec3(1.0), 0.4);
+    }
+
+    gl_FragColor = vec4(color, 1.0);
+}
+</script>
+
+<script type="text/javascript" src="Common/webgl-utils.js"></script>
+<script type="text/javascript" src="Common/initShaders.js"></script>
+<script type="text/javascript" src="Common/MV.js"></script>
+<script type="text/javascript" src="carpet.js"></script>
+
+<style>
+  body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+         margin: 24px; color: #222; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: #666; font-size: 0.9rem; margin: 0 0 16px; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  canvas { border: 1px solid #999; width: 560px; height: 560px; max-width: 100%;
+           cursor: crosshair; }
+  .panel { width: 310px; }
+  fieldset { border: 1px solid #ccc; margin: 0 0 16px; padding: 10px 14px 12px; }
+  legend { font-weight: bold; padding: 0 6px; }
+  .row { margin: 8px 0; }
+  .row > label { display: block; margin-bottom: 4px; }
+  input[type=range] { width: 190px; vertical-align: middle; }
+  button { padding: 5px 10px; }
+  #Palette { display: flex; gap: 3px; }
+  #Palette div { flex: 1; text-align: center; font-size: 0.75rem; color: #555; }
+  #Palette span { display: block; height: 22px; border: 2px solid transparent;
+                  border-radius: 3px; margin-bottom: 2px; }
+  #Palette div.current span { border-color: #222; }
+  #Palette div.current { color: #000; font-weight: bold; }
+  #info { font-size: 0.9rem; color: #444; line-height: 1.6; }
+</style>
+</head>
+
+<body>
+<h1>Sierpinski Carpet</h1>
+<p class="sub">클릭: 해당 사각형 분할 · Shift+클릭: 한 단계 합치기 · 키보드 + / − : 전체 분할 횟수</p>
+
+<div class="wrap">
+  <canvas id="gl-canvas" width="512" height="512">
+    Oops ... your browser doesn't support the HTML5 canvas element
+  </canvas>
+
+  <div class="panel">
+    <fieldset>
+      <legend>분할 횟수 제어</legend>
+      <div class="row">
+        <label for="DepthSlider">전체 분할 횟수: <b id="DepthValue">3</b></label>
+        0 <input id="DepthSlider" type="range" min="0" max="8" step="1" value="3"> 8
+      </div>
+      <div class="row">
+        <button id="GrowButton">성장 애니메이션 보기</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>색상 제어</legend>
+      <div class="row">
+        <label>분할 횟수별 색상</label>
+        <div id="Palette"></div>
+      </div>
+      <div class="row">
+        <label for="PaletteMenu">색상 테마</label>
+        <select id="PaletteMenu">
+          <option value="0">무지개</option>
+          <option value="1">바다</option>
+          <option value="2">노을</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="BgColor">배경색</label>
+        <input id="BgColor" type="color" value="#fdfcf8">
+      </div>
+      <div class="row">
+        <label for="FilterMenu">색상 모델 필터</label>
+        <select id="FilterMenu">
+          <option value="0">RGB (원본)</option>
+          <option value="1">CMY (보색)</option>
+          <option value="2">NTSC 명암도 (흑백)</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <div id="info"></div>
+  </div>
+</div>
 </body>
-</html> 
+</html>

@@ -1,0 +1,15 @@
+# Sierpinski Carpet (WebGL)
+
+컴퓨터 그래픽스와 메타버스 과제 1 — WebGL을 이용한 Sierpinski Carpet 그리기
+
+## 실행 방법
+- `index.html`을 브라우저로 열거나, VS Code Live Server로 실행
+
+## 기능
+- 분할 횟수 제어: 슬라이더(0~6) 또는 키보드 `+` / `-`
+- 색상 제어: 단색 / 그라데이션 / 사각형별 랜덤 색상, 배경색 변경
+
+## 파일 구성
+- `index.html` : 캔버스, UI, vertex/fragment shader
+- `carpet.js` : 재귀 분할, GPU 버퍼 전송, 렌더링, 이벤트 처리
+- `Common/` : 교재(Angel & Shreiner) 제공 유틸리티 (webgl-utils.js, initShaders.js, MV.js)
