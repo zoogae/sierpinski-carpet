@@ -1,29 +1,95 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko"> 
     <head>
         <meta charset="utf-8">
         <title> Sierpinski Carpet</title>
-        <script id = "vertex-shader" type = "x-shader/x-vertex">
-        attribute vec4 vPosition;
-        void main() {
+
+        <script id="vertex-shader" type="x-shader/x-vertex">
+        attribute vec4  vPosition;   // 정점 위치 (클립 좌표)
+        attribute vec2  vLocal;      // 사각형 내부 좌표 (0 ~ 1)
+        attribute float vLevel;      // 정점으로 분할한 단계
+        attribute float vDepth;      // 이 사각형의 목표 분할 횟수
+
+        varying vec2  fLocal;
+        varying float fLevel;
+        varying float fDepth;
+        varying vec2  fPosition;
+
+        void mian() {
             gl_Position = vPosition;
-        }
-        </script>
+            fLocal    = vLocal;
+            fLevel    = vLevel;
+            fDepth    = vDepth;
+            fPosition = vPosition.xy;
+        }</script>
+
         <script id="fragment-shader" type="x-shader/x-fragment">
-        precision mediump float;
-        void main() {
-            gl_FragColor= vec4(0.2, 0.3, 0.6, 1.0);
-        }
-    </script>
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+            precision highp float;
+        #else
+            precision mediump float;
+        #endif
+
+        varying vec2  fLocal;
+        varying float fLevel;
+        varying float fDepth;
+        varying vec2  fPosition;
+
+        void main() { //정점으로 나누지 않은 나머지 단계는 단편 단위로 가운데를 제거
+            float extra = floor(fDepth - fLevel + 0.5);
+            vec2 p = fLocal;
+            for (int i = 0; i < 8; i++) {
+                if (float(i) >= extra) break;
+                p *= 3.0;
+                vec2 cell = floor(p);
+                if (cell.x == 1.0 && cell.y == 1.0) discard;
+                p -= cell;
+            }
+            vec3 color = vec3(0.2, 0.3, 0.6);
+            gl_FragColor = vec4(color, 1.0);
+        }</script>
+
     <script type="text/javascript" src = "Common/webgl-utils.js"></script>
     <script type="text/javascript" src = "Common/initShaders.js"></script>
     <script type="text/javascript" src = "Common/MV.js"></script>
     <script type="text/javascript" src = "carpet.js"></script>
+
+    <style>
+        body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+                margin: 24px; color: #222; }
+        h1 { font-size: 1.4rem; margin: 0 0 4px; }
+        .sub { color: #666; font-size: 0.9rem; margin: 0 0 16px; }
+        .wrap { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+        canvas { border: 1px solid #999; width: 560px; height: 560px; max-width: 100%; }
+        .panel { width: 310px; }
+        fieldset { border: 1px solid #ccc; margin: 0 0 16px; padding: 10px 14px 12px; }
+        legend { font-weight: bold; padding: 0 6px; }
+        .row { margin: 8px 0; }
+        .row > label { display: block; margin-bottom: 4px; }
+        input[type=range] { width: 190px; vertical-align: middle; }
+        #info { font-size: 0.9rem; color: #444; line-height: 1.6; }
+    </style>
     </head>
 
     <body>
-        <canvas id="gl-canvas" width="512" height = "512">
+    <h1>Sierpinski Carpet</h1>
+    <p class="sub">키보드 + / − : 전체 분할 횟수</p>
+
+    <div class="wrap">
+        <canvas id="gl-canvas" width="512" height="512">
             Oops ... your browser doesn't support the HTML5 canvas element
         </canvas>
-    </body>
+
+        <div class="panel">
+            <fieldset>
+            <legend>분할 횟수 제어</legend>
+            <div class="row">
+                <label for="DepthSlider">전체 분할 횟수: <b id="DepthValue">3</b></label>
+                0 <input id="DepthSlider" type="range" min="0" max="5" step="1" value="3"> 5
+            </div>
+            </fieldset>
+            <div id="info"></div>
+        </div>
+    </div>
+</body>
 </html> 
